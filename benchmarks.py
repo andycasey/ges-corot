@@ -4,8 +4,7 @@ import logging
 import numpy as np
 import matplotlib.pyplot as plt
 
-from load_data import benchmark_truths, all_node_results, validate_all
-
+from load_data import benchmark_truths, all_node_results
 
 
 def plot_benchmark_parameters():
@@ -48,8 +47,8 @@ def plot_benchmark_parameters():
         for parameter in parameters:
             non_finite_measurements = sum(~np.isfinite(node_data[parameter][benchmark_indices]))
             if non_finite_measurements > 0:
-                logging.warn("Missing {0} {1} benchmark measurements from {2} node".format(
-                    non_finite_measurements, parameter, node_name))
+                logging.warn("Missing {0}/{1} {2} benchmark measurements from {3} node".format(
+                    non_finite_measurements, len(benchmark_truths["OBJECT"]), parameter, node_name))
 
         # Plot the measured values compared to the benchmark truth values.
         fig, axes = plt.subplots(len(parameters), 1)
@@ -76,9 +75,5 @@ def plot_benchmark_parameters():
 
 
 if __name__ == "__main__":
-
-    # Validate the data
-    validate_all()
-
     plot_benchmark_parameters()
 
