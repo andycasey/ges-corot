@@ -1,3 +1,5 @@
-node-data/
+data/*/
+data/initial_parameters.fits
 *.pyc
 plots/
+models/*.pkl
