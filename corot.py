@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+""" Homogenisation model for GES/CoRoT data. """
+
+__author__ = "Andy Casey (arc@ast.cam.ac.uk)"
 
 import cPickle as pickle
 import logging

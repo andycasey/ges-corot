@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+""" Load and validate GES/CoRoT node measurements. """
+
+__author__ = "Andy Casey (arc@ast.cam.ac.uk)"
 
 import logging
 from collections import OrderedDict

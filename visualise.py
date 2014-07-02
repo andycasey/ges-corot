@@ -1,5 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 """ Visualise the node data prior to homogenisation. """
+
+__author__ = "Andy Casey (arc@ast.cam.ac.uk)"
 
 import matplotlib.pyplot as plt
 
