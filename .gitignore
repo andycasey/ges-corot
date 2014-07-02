@@ -3,3 +3,7 @@ data/initial_parameters.fits
 *.pyc
 plots/
 models/*.pkl
+*.aux
+*.log
+*.synctex.gz
+*.pdf
