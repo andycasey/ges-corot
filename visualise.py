@@ -215,6 +215,30 @@ def boxplots(benchmark_parameters, data, recommended_values=None, recommended_un
     return fig
 
 
+def node_uncertainties(model, node_names):
+    """
+    Plot the uncertainties due to each node.
+    """
+
+    samples = model.extract(permuted=True)
+    fig, ax = plt.subplots()
+    ax.set_color_cycle(["#348ABD", "#7A68A6", "#A60628", "#467821", "#CF4457", "#188487", "#E24A33", "#000000"])
+    bins = np.linspace(0, 1000, samples["var_node"].shape[0]**0.5)
+    sorted_indices = np.argsort(np.median(samples["var_node"], axis=0))
+
+    for index in sorted_indices:
+
+        node_name = node_names[index]
+
+        y = np.histogram(samples["var_node"][:, index]**0.5, bins, normed=True)
+        ax.plot(bins[1:], y[0], label=node_name, lw=2)
+
+    ax.legend(loc=1, frameon=False)
+    ax.set_xlabel("$\sigma\left({T_{\\rm eff}}\\right)$")
+    ax.set_ylabel("Normalised count")
+
+    return fig
+
 def visualise_by_setup(all_node_results, setup, parameter="TEFF", extent=(3000, 7000)):
     """
     Create a corner plot showing the differences between each node.
@@ -344,12 +368,15 @@ def plot_uncertainty_distributions(all_node_results, setup, parameter="TEFF"):
     ax.set_xlabel("{0} UNCERTAINTY".format(parameter))
     return fig
 
-fig = plot_uncertainty_distributions(all_node_results, "UVES")
-fig.savefig("plots/uves-uncertainty-distribution.pdf")
-fig = plot_uncertainty_distributions(all_node_results, "GIRAFFE")
-fig.savefig("plots/giraffe-uncertainty-distribution.pdf")
 
-uves_figure = visualise_by_setup(all_node_results, "UVES")
-uves_figure.savefig("plots/uves-comparison.pdf")
-giraffe_figure = visualise_by_setup(all_node_results, "GIRAFFE")
-giraffe_figure.savefig("plots/giraffe-comparison.pdf")
+if __name__ == "__main__":
+
+    fig = plot_uncertainty_distributions(all_node_results, "UVES")
+    fig.savefig("plots/uves-uncertainty-distribution.pdf")
+    fig = plot_uncertainty_distributions(all_node_results, "GIRAFFE")
+    fig.savefig("plots/giraffe-uncertainty-distribution.pdf")
+
+    uves_figure = visualise_by_setup(all_node_results, "UVES")
+    uves_figure.savefig("plots/uves-comparison.pdf")
+    giraffe_figure = visualise_by_setup(all_node_results, "GIRAFFE")
+    giraffe_figure.savefig("plots/giraffe-comparison.pdf")
