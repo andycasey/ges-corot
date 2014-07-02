@@ -1,9 +1,12 @@
 
 import logging
+from collections import OrderedDict
+
 import numpy as np
 import pyfits
 
-__all__ = ["all_node_results", "benchmark_truths", "initial_parameters", "validate_all"]
+__all__ = ["all_node_results", "benchmark_truths", "initial_parameters", "validate_all",
+    "uves_results", "giraffe_results"]
 
 def load_benchmarks(filename="benchmarks.txt"):
     """ Loads the Gaia benchmarks and expected stellar parameters as
@@ -23,12 +26,14 @@ def load_benchmarks(filename="benchmarks.txt"):
 
     return benchmarks
 
+
 def load_node_data(filename, ext):
     data = pyfits.open(filename)[ext].data
 
     # Sort by CNAME
     indices = np.argsort(data["CNAME"])
     return data[indices]
+
 
 def validate(node):
     """
@@ -70,6 +75,7 @@ def validate(node):
 def validate_all():
     return map(validate, all_node_results.keys())
 
+
 # Functions defined. Load the data.
 all_node_results = {
     "ARCETRI-UVES": (load_node_data("data/arcetri/GES_CoRoT_Arcetri_iter1.fits", 1), None, "UVES"),
@@ -88,6 +94,30 @@ all_node_results = {
     "EPINARBO-GIRAFFE": (load_node_data("data/epinarbo/Results_CoRoT_Epinarbo_18June2014/GES_CoRoT_Epinarbo_18June2014-v2.fits", 1), None, "GIRAFFE"),
 }
 
+uves_results = OrderedDict([
+    ("ARCETRI", (load_node_data("data/arcetri/GES_CoRoT_Arcetri_iter1.fits", 1), None, "UVES")),
+    ("IACAIP", (load_node_data("data/iacaip/GES_CoRoT_IACAIP_v0.fits", 1), None, "UVES")),
+    ("PHOTOMETRY", (load_node_data("data/photometry/GES_CoRoT_PhotTeff.fits", 1), None, "UVES")),
+    ("LUMBA (H-ALPHA)", (load_node_data("data/lumba/25june/GES_CoRoT_25May2014_LUMBA_HalphaTeff.fits", 1), None, "UVES")),
+    ("LUMBA (NLTE)", (load_node_data("data/lumba-nlte/GES_iDR3_WG11_LUMBA-CoRoT.fits", 1), None, "UVES")),
+    ("SOUSA", (load_node_data("data/sousa/Results_line_ratio_sousa-cleaned.fits", 1), None, "UVES")),
+    ("BOLOGNA", (load_node_data("data/bologna/Bologna_GES_CoRoTv2/GES_CoRoT_25May2014_Bologna_NEW-cleaned.fits", 1), None, "UVES")),
+    ("VILNIUS", (load_node_data("data/vilnius/GES_Corot_iteration1_Vilnius.v11-corrected.fits", 1), None, "UVES")),
+    ("EPINARBO", (load_node_data("data/epinarbo/Results_CoRoT_Epinarbo_18June2014/GES_CoRoT_Epinarbo_18June2014-v2.fits", 1), None, "UVES")),
+])
+
+giraffe_results = OrderedDict([
+    ("ARCETRI", (load_node_data("data/arcetri/GES_CoRoT_Arcetri_iter1.fits", 1), None, "GIRAFFE")),
+    ("PHOTOMETRY", (load_node_data("data/photometry/GES_CoRoT_PhotTeff.fits", 1), None, "GIRAFFE")),
+    ("LUMBA (H-ALPHA)", (load_node_data("data/lumba/25june/GES_CoRoT_25May2014_LUMBA_HalphaTeff.fits", 1), None, "GIRAFFE")),
+    ("LUMBA (EXCITATION)", (load_node_data("data/lumba/25june/GES_CoRoT_25May2014_LUMBA_ExcTeff.fits", 1), None, "GIRAFFE")),
+    ("SOUSA", (load_node_data("data/sousa/Results_line_ratio_sousa-cleaned.fits", 1), None, "GIRAFFE")),
+    ("EPINARBO", (load_node_data("data/epinarbo/Results_CoRoT_Epinarbo_18June2014/GES_CoRoT_Epinarbo_18June2014-v2.fits", 1), None, "GIRAFFE")),
+])
+
+assert len(set([each[2] for each in uves_results.values()])) == 1
+assert len(set([each[2] for each in giraffe_results.values()])) == 1
+
 bm_object, bm_teff, bm_u_teff, bm_logg, bm_u_logg, bm_z = np.loadtxt("data/benchmarks.txt",
     usecols=(2, 3, 4, 5, 6, 7), dtype=str, unpack=True)
 
@@ -97,8 +127,7 @@ bm_teff, bm_u_teff, bm_logg, bm_u_logg, bm_z = map(lambda each: np.array(each, d
 
 # Create record array
 benchmark_truths = np.core.records.fromarrays([bm_object, bm_teff, bm_u_teff, bm_logg, bm_u_logg, bm_z],
-    names=["OBJECT", "TEFF", "u_TEFF", "LOGG", "u_LOGG", "FeH"],
-    formats=["|S10"] + ["f8"] * 5)
+    names=["OBJECT", "TEFF", "u_TEFF", "LOGG", "u_LOGG", "FeH"], formats=["|S10"] + ["f8"] * 5)
 
 initial_parameters = pyfits.open("data/initial_parameters.fits")[1].data
 

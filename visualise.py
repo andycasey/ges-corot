@@ -13,10 +13,10 @@ from itertools import combinations
 import numpy as np
 
 
-def node_benchmark_measurements(benchmarks, data, setup, node_names, recommended_values=None, recommended_uncertainties=None,
+def node_benchmark_measurements(benchmarks, model, recommended_values=None, recommended_uncertainties=None,
     colours=("k", "g", "r"), extent=500, extent_offset=50):
 
-    num_nodes, num_benchmarks = data["node_teff_measured"].shape
+    num_nodes, num_benchmarks = model.data["node_teff_measured"].shape
     fig, axes = plt.subplots(num_nodes, 1, figsize=(8, 14))
     fig.subplots_adjust(right=0.98, top=0.98, bottom=0.10, left=0.10)
 
@@ -27,9 +27,9 @@ def node_benchmark_measurements(benchmarks, data, setup, node_names, recommended
     benchmark_indices = np.argsort(benchmarks["TEFF"])
     
     # Sort by alphabetical node name
-    for i, (ax, node_name) in enumerate(zip(axes, sorted(node_names))):
+    for i, (ax, node_name) in enumerate(zip(axes, sorted(model.data["node_names"]))):
 
-        node_index = node_names.index(node_name)
+        node_index = model.data["node_names"].index(node_name)
 
         # Draw the grey (non-spectroscopic) uncertainty regions for each plot.
         patches = []
@@ -44,8 +44,8 @@ def node_benchmark_measurements(benchmarks, data, setup, node_names, recommended
             linewidths=0, zorder=100))
 
         # Plot the point uncertainty as measured by the node.
-        node_measurement = data["node_teff_measured"][node_index, benchmark_indices]
-        node_uncertainty = data["node_teff_uncertainty"][node_index, benchmark_indices]
+        node_measurement = model.data["node_teff_measured"][node_index, benchmark_indices]
+        node_uncertainty = model.data["node_teff_uncertainty"][node_index, benchmark_indices]
         node_difference = node_measurement - benchmarks[benchmark_indices]["TEFF"]
         
         bad_measurements = (0 >= node_measurement) * np.isfinite(node_measurement)
@@ -93,10 +93,7 @@ def node_benchmark_measurements(benchmarks, data, setup, node_names, recommended
         ax.set_xticks([])
         ax.set_xticklabels([])
         ax.yaxis.set_major_locator(MaxNLocator(3))
-        node_label = node_name
-        if node_label.endswith("-" + setup):
-            node_label = node_label[:-len(setup) - 1]
-        node_label = node_label.replace("-", " ")
+        node_label = node_name.replace("-", " ")
         ax.set_ylabel(node_label)# + "\n\n$\Delta{}T_{\\rm eff}\,({\\rm K})$")
         #ax.yaxis.set_label_coords(-0.025, 0.5)
 
@@ -121,17 +118,17 @@ def node_benchmark_measurements(benchmarks, data, setup, node_names, recommended
     return fig
 
 
-def boxplots(benchmark_parameters, data, recommended_values=None, recommended_uncertainties=None, sort=True,
+def boxplots(benchmark_parameters, model, recommended_values=None, recommended_uncertainties=None, sort=True,
     summarise=False, colours=("k", "g")):
     """ Do box plots """
 
     dimension = "TEFF"
-    num_nodes, num_benchmarks = data["node_teff_measured"].shape
+    num_nodes, num_benchmarks = model.data["node_teff_measured"].shape
 
     fig, ax = plt.subplots()
     fig.subplots_adjust(bottom=0.20, right=0.95, top=0.95)
     
-    measurements = data["node_teff_measured"]
+    measurements = model.data["node_teff_measured"]
     measurements[0 >= measurements] = np.nan
     deltas = measurements - benchmark_parameters[dimension.upper()]
 
@@ -215,10 +212,12 @@ def boxplots(benchmark_parameters, data, recommended_values=None, recommended_un
     return fig
 
 
-def node_uncertainties(model, node_names):
+def inferred_node_uncertainties(model, node_names=None):
     """
-    Plot the uncertainties due to each node.
+    Plot the inferred uncertainties due to each node.
     """
+    if node_names is None:
+        node_names = model.data["node_names"]
 
     samples = model.extract(permuted=True)
     fig, ax = plt.subplots()
@@ -239,16 +238,11 @@ def node_uncertainties(model, node_names):
 
     return fig
 
-def visualise_by_setup(all_node_results, setup, parameter="TEFF", extent=(3000, 7000)):
+
+def node_all_measurements(all_node_results, parameter="TEFF", extent=(3000, 7000)):
     """
     Create a corner plot showing the differences between each node.
     """
-
-    # Get only nodes from this setup.
-    nodes = []
-    for node_name, (node_data, node_flags, node_setup) in all_node_results.iteritems():
-        if node_setup == setup:
-            nodes.append(node_name)
 
     # How many nodes to plot?
     K = len(nodes) - 1
@@ -268,9 +262,9 @@ def visualise_by_setup(all_node_results, setup, parameter="TEFF", extent=(3000, 
     fig.subplots_adjust(left=lb, bottom=lb, right=tr, top=tr,
         wspace=whspace, hspace=whspace)
     
-    for i, node_y in enumerate(nodes):
+    for i, node_y in enumerate(all_node_results.keys()):
 
-        for j, node_x in enumerate(nodes):
+        for j, node_x in enumerate(all_node_results.keys()):
             if j == K: break
             elif j > i:
                 try:
@@ -314,6 +308,7 @@ def visualise_by_setup(all_node_results, setup, parameter="TEFF", extent=(3000, 
                 ax.yaxis.set_label_coords(-0.3, 0.5)
 
     return fig
+
 
 def plot_uncertainty_distributions(all_node_results, setup, parameter="TEFF"):
 
@@ -368,7 +363,7 @@ def plot_uncertainty_distributions(all_node_results, setup, parameter="TEFF"):
     ax.set_xlabel("{0} UNCERTAINTY".format(parameter))
     return fig
 
-
+"""
 if __name__ == "__main__":
 
     fig = plot_uncertainty_distributions(all_node_results, "UVES")
@@ -380,3 +375,4 @@ if __name__ == "__main__":
     uves_figure.savefig("plots/uves-comparison.pdf")
     giraffe_figure = visualise_by_setup(all_node_results, "GIRAFFE")
     giraffe_figure.savefig("plots/giraffe-comparison.pdf")
+"""
