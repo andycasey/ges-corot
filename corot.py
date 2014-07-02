@@ -1,6 +1,4 @@
 
-
-
 import cPickle as pickle
 import logging
 import os
@@ -17,8 +15,51 @@ from load_data import *
 
 import visualise
 
+def build_data_dict(benchmarks, all_node_results):
 
-def calibrate_noise_model(benchmarks, all_node_results, setup, run_name=None, model_filename="models/noise-with-outliers.stan", 
+    # The data needs to be in a cleaned format.
+    N_nodes, N_benchmarks = len(all_node_results), len(benchmarks)
+    node_teff_measured = np.zeros((N_nodes, N_benchmarks))
+    node_teff_uncertainty = np.zeros((N_nodes, N_benchmarks))
+
+    # Match benchmarks in each node, then include their results to the array.
+    i = 0
+    additive_variance = np.zeros((N_nodes, N_benchmarks))
+    for node, values in all_node_results.iteritems():
+        node_results, node_flags, node_setup = values
+        
+        # Match by name
+        for j, benchmark in enumerate(benchmarks):
+            match_by_object = np.where((node_results["OBJECT"] == benchmark["OBJECT"]) * (node_results["SETUP"] == node_setup))[0]
+            if len(match_by_object) == 0:
+                logging.warn("Benchmark {0} not found in {1} results!".format(benchmark["OBJECT"], node))
+                continue
+            elif len(match_by_object) > 1:
+                raise IndexError("found multiple benchmarks {0} for setup {1} by node {2}".format(benchmark["OBJECT"], node_setup, node))
+
+            # If the measurement is negative or non-finite, then add a lot of variance to this measurement.
+            measurement = node_results[match_by_object]["TEFF"]
+            if np.isfinite(measurement) and measurement > 0:
+                node_teff_measured[i, j] = measurement
+                node_teff_uncertainty[i, j] = node_results[match_by_object]["e_TEFF"]
+            else:
+                additive_variance[i, j] = 10000000000.
+        i += 1
+
+    # Prepare the data in a cleaner format.
+    data = {
+        "non_spec_teff_measured": benchmarks["TEFF"],
+        "non_spec_teff_sigma": benchmarks["u_TEFF"],
+        "N_nodes": N_nodes,
+        "N_benchmarks": N_benchmarks,
+        "node_teff_measured": node_teff_measured,
+        "node_teff_uncertainty": node_teff_uncertainty,
+        "additive_variance": additive_variance
+    }
+    return data
+
+
+def calibrate_noise_model(benchmarks, all_node_results, run_name=None, model_filename="models/noise-with-outliers.stan", 
     iterations=5000, warmup=4000, chains=1):
     """
     Run the given noise model for the benchmark stars.
@@ -30,9 +71,6 @@ def calibrate_noise_model(benchmarks, all_node_results, setup, run_name=None, mo
     else:
         # If a name has been given, use a timestamp too.
         run_name = "-".join([run_name, format(md5(ctime().encode("utf-8")).hexdigest())])
-
-    # Include the setup name in the run name.
-    run_name = "-".join([setup.lower(), run_name])
 
     # Check for a compiled version of this model.
     basename, ext = os.path.splitext(model_filename)
@@ -51,49 +89,7 @@ def calibrate_noise_model(benchmarks, all_node_results, setup, run_name=None, mo
         with open(pickled_model_filename, "wb") as fp:
             pickle.dump(model, fp)
 
-    # The data needs to be in a cleaned format.
-    N_nodes, N_benchmarks = sum([(each[2] == setup) for each in all_node_results.values()]), len(benchmarks)
-    node_teff_measured = np.zeros((N_nodes, N_benchmarks))
-    node_teff_uncertainty = np.zeros((N_nodes, N_benchmarks))
-
-    # Match benchmarks in each node, then include their results to the array.
-    i = 0
-    additive_variance = np.zeros((N_nodes, N_benchmarks))
-    node_names = []
-    for node, values in all_node_results.iteritems():
-        node_results, node_flags, node_setup = values
-        if node_setup != setup: continue
-
-        # Match by name
-        for j, benchmark in enumerate(benchmarks):
-            match_by_object = np.where((node_results["OBJECT"] == benchmark["OBJECT"]) * (node_results["SETUP"] == setup))[0]
-            if len(match_by_object) == 0:
-                logging.warn("Benchmark {0} not found in {1} results!".format(benchmark["OBJECT"], node))
-                continue
-            elif len(match_by_object) > 1:
-                raise IndexError("found multiple benchmarks {0} for setup {1} by node {2}".format(benchmark["OBJECT"], setup, node))
-
-            # If the measurement is negative or non-finite, then add a lot of variance to this measurement.
-            measurement = node_results[match_by_object]["TEFF"]
-            if np.isfinite(measurement) and measurement > 0:
-                node_teff_measured[i, j] = measurement
-                node_teff_uncertainty[i, j] = node_results[match_by_object]["e_TEFF"]
-            else:
-                additive_variance[i, j] = 10000000000.
-
-        node_names.append(node)
-        i += 1
-
-    # Prepare the data in a cleaner format.
-    data = {
-        "non_spec_teff_measured": benchmarks["TEFF"],
-        "non_spec_teff_sigma": benchmarks["u_TEFF"],
-        "N_nodes": N_nodes,
-        "N_benchmarks": N_benchmarks,
-        "node_teff_measured": node_teff_measured,
-        "node_teff_uncertainty": node_teff_uncertainty,
-        "additive_variance": additive_variance
-    }
+    data = build_data_dict(benchmarks, all_node_results)
 
     logging.info("Optimizing...")
     op = model.optimizing(data=data)
@@ -102,7 +98,10 @@ def calibrate_noise_model(benchmarks, all_node_results, setup, run_name=None, mo
     logging.info("Fitting...")
     calibrated_model = model.sampling(data=data, pars=op["par"], iter=iterations, warmup=warmup, chains=chains)    
     
-    return (calibrated_model, node_names, data)
+    # Add the node names into the data dict.
+    calibrated_model.data["node_names"] = all_node_results.keys()
+
+    return calibrated_model
 
 
 def homogenise(data, model):
@@ -112,8 +111,6 @@ def homogenise(data, model):
     data : ndarray of size (N, ) where N is number of nodes.
     model : fitted model
     """
-
-    assert max_mixtures >= 1
 
     # Use mu from data, and draw uncertainty from each sample.
     extracted_samples = model.extract(permuted=True)
@@ -146,46 +143,59 @@ def homogenise(data, model):
     return np.median(calibrated_data_weighted), np.std(calibrated_data_weighted)
 
 
-def cross_validate(benchmarks, all_node_results, setup, **kwargs):
+def homogenise_all(all_node_results, model):
+    """
+    Homogenise the data from all nodes, for all stars.
+    """
+
+    # Need to identify stars that have this setup.
+    first_node = all_node_results.keys()[0]
+    setup = all_node_results[first_node][2]
+    cnames = all_node_results[first_node][0][(all_node_results[first_node][0]["SETUP"] == setup)]
+    num_stars = len(cnames)
+
+    # Go through each star, find it in all other nodes.
+    homogenised_results = np.zeros((num_stars, 2))
+    for i, cname in enumerate(cnames):
+
+        # Match by CNAME in all the nodes.
+        data = []
+        for node, node_results in all_node_results.keys():
+            data.append(node_results[0][(node_results[0]["CNAME"] == cname) * (node_results[0]["SETUP"] == setup)]["TEFF"])
+
+        # Homogenise the data.            
+        homogenised_results[i] = homogenise(data, model)
+
+    # Return a table with all the homogenised values.
+    return homogenised_results
+ 
+
+def cross_validate(benchmarks, all_node_results, **kwargs):
     """
     Remove a benchmark from the sample. Calibrate the model. Use the calibrated model to homogenise node
     measurements for the benchmark star. Use this to judge the predictive power of the model.
     """
 
     # Measurements & Uncertainty.
-    measurements = np.zeros((len(benchmarks), 2))
+    results = np.zeros((len(benchmarks), 2))
     for i, benchmark in enumerate(benchmarks):
         # Create a subset with this benchmark removed.
         benchmark_subset = np.delete(benchmarks, i)
 
         # Calibrate the model on our subset.
-        calibrated_model, node_names, model_data = calibrate_noise_model(benchmark_subset, all_node_results, setup, **kwargs)
+        calibrated_model = calibrate_noise_model(benchmark_subset, all_node_results, **kwargs)
 
         # Get the measurements for this benchmark.
-        benchmark_measurements = np.zeros(len(node_names))
-        for j, node_name in enumerate(node_names):
-            node_data = all_node_results[node_name][0]
-            index = np.where((node_data["OBJECT"] == benchmark["OBJECT"]) * (node_data["SETUP"] == setup))[0]
+        benchmark_measurements = np.zeros(len(all_node_results))
+        for j, (node_name, node_results) in enumerate(all_node_results.iteritems()):
+            node_data, node_tech_flags, node_setup = node_results
+            index = np.where((node_data["OBJECT"] == benchmark["OBJECT"]) * (node_data["SETUP"] == node_setup))[0]
             assert len(index) == 1
             benchmark_measurements[j] = node_data["TEFF"][index[0]]
 
         # Homogenise the measurements for this benchmark.
-        measurements[i] = homogenise(benchmark_measurements, calibrated_model, **kwargs)
+        results[i] = homogenise(benchmark_measurements, calibrated_model)
 
-    return measurements
-
-if __name__ == "__main__":
-
-    setup, model_name = "UVES", "preliminary_test-{0}".format(md5(os.path.basename(ctime()).encode("utf-8")).hexdigest())
-    model, node_names, data = calibrate_noise_model(benchmark_truths, all_node_results, setup)
-    
-    # Draw the node uncertainties
-    fig1 = visualise.node_uncertainties(model, node_names)
-
-    # Do a cross-validation of all the benchmark stars
-    results = cross_validate(benchmark_truths, all_node_results, setup)
-
-    # Do some post-processing of the cross-validation results
-    fig2 = visualise.boxplots(benchmark_truths, data, results[:,0], results[:,1])
-    fig3 = visualise.node_benchmark_measurements(benchmark_truths, data, setup, node_names, results[:,0], results[:,1])
+    measurements, uncertainties = results[:,0], results[:,1]
+    return (measurements, uncertainties)
 
