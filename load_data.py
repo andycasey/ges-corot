@@ -47,11 +47,16 @@ def validate(node):
             ", ".join(list(initial_parameters[sort_a]["CNAME"][same_temperatures]))))
         all_ok = False
 
+    same_temperature_uncertainties = (initial_parameters[sort_a]["e_TEFF"] == all_node_results[node][0][sort_b]["e_TEFF"]) * (initial_parameters[sort_a]["SETUP"] == setup)
+    if np.any(same_temperature_uncertainties):
+        logging.warn("Node {0} has {1} TEFF uncertainties that match the input values: {2}".format(node, np.sum(same_temperature_uncertainties),
+            ", ".join(list(initial_parameters[sort_a]["CNAME"][same_temperature_uncertainties]))))
+        all_ok = False
+
     final = all_node_results[node][0][sort_b]
     initial = initial_parameters[sort_a]
 
     logg_difference = (np.abs(final["LOGG"] - initial["LOGG"]) > 0) * (initial["SETUP"] == setup)
-
     if np.any(logg_difference):
         logging.warn("Node {0} has not fixed LOGG measurements for {1} stars (mean difference: {2:+.2f}, std. dev: {3:.2f}): {4}".format(node,
             np.sum(logg_difference), np.mean(final["LOGG"][logg_difference] - initial["LOGG"][logg_difference]), 
