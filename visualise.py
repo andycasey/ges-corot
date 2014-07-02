@@ -10,6 +10,8 @@ from matplotlib.collections import PatchCollection
 from load_data import all_node_results
 from itertools import combinations
 
+import numpy as np
+
 
 def node_benchmark_measurements(benchmarks, data, setup, node_names, recommended_values=None, recommended_uncertainties=None,
     colours=("k", "g", "r"), extent=500, extent_offset=50):
