@@ -6,6 +6,8 @@
 __author__ = "Andy Casey (arc@ast.cam.ac.uk)"
 
 import os
+import cPickle as pickle
+from collections import OrderedDict
 from hashlib import md5
 from time import ctime
 
@@ -55,7 +57,19 @@ hdulist = corot.update_table("results/homogenised_parameters.fits",
 hdulist.writeto("results/homogenised_parameters.fits", clobber=True)
 
 # Visualise the homogenised results in context of the initial node results as a corner plot.
-giraffe_results_incl_ensemble = giraffe_results.copy()
-giraffe_results_incl_ensemble["ENSEMBLE RESULT"] = (load_node_data("results/homogenised_parameters.fits", 1), "NONE", "GIRAFFE")
+giraffe_results_incl_ensemble = OrderedDict([("ENSEMBLE RESULT", (load_node_data("results/homogenised_parameters.fits", 1), "NONE", "GIRAFFE"))])
+giraffe_results_incl_ensemble.update(giraffe_results)
 fig_node_all_measurements = visualise.node_all_measurements(giraffe_results_incl_ensemble)
 fig_node_all_measurements.savefig("plots/giraffe-all-measurements-incl-ensemble.pdf")
+
+# Pickle the results.
+with open("results/giraffe{0}.pkl".format("-" + run_name if run_name is not None else ""), "wb") as fp:
+    pickle.dump({
+        "model": model,
+        "cv_measurements": cv_measurements,
+        "cv_uncertainties": cv_uncertainties,
+        "giraffe_cnames": giraffe_cnames,
+        "giraffe_snr": giraffe_snr,
+        "giraffe_homogenised_results": giraffe_homogenised_results
+    }, fp, -1)
+
