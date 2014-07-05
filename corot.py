@@ -216,4 +216,29 @@ def cross_validate(benchmarks, all_node_results, **kwargs):
     return (measurements, uncertainties)
 
 
+def update_table(parameter_filename, cnames, results, setup, ext_index=1, clear_columns=True):
+    """
+    Load the data from the parameter filename then update the TEFF results by match on
+    CNAME and SETUP.
+    """
+
+    image = pyfits.open(parameter_filename)
+
+    # Should we clear the columns so that none of the initial parameters actually make it through
+    # if they haven't been homogenised?
+    if clear_columns:
+        setup_match = (image[ext_index].data["SETUP"] == setup)
+        image[ext_index].data["TEFF"][setup_match] = np.nan
+        image[ext_index].data["E_TEFF"][setup_match] = np.nan
+        image[ext_index].data["NN_TEFF"][setup_match] = 0
+
+    # Now fill it with the homogenised results.
+    for cname, (teff, u_teff, num_nodes) in zip(cnames, results):
+        match = (image[ext_index].data["CNAME"] == cname) * (image[ext_index].data["SETUP"] == setup)
+        image[ext_index].data[match]["TEFF"] = teff
+        image[ext_index].data[match]["e_TEFF"] = u_teff
+        image[ext_index].data[match]["NN_TEFF"] = num_nodes
+
+    return image
+
 
