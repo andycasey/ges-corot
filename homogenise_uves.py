@@ -52,6 +52,6 @@ hdulist.writeto("results/homogenised_parameters.fits", clobber=True)
 
 # Visualise the homogenised results in context of the initial node results as a corner plot.
 uves_results_incl_ensemble = uves_results.copy()
-uves_results_incl_ensemble["ENSEMBLE RESULT"] = (load_data.load_node_data("results/homogenised_parameters.fits"), "NONE", "UVES")
+uves_results_incl_ensemble["ENSEMBLE RESULT"] = (load_node_data("results/homogenised_parameters.fits", 1), "NONE", "UVES")
 fig_node_all_measurements = visualise.node_all_measurements(uves_results_incl_ensemble)
 fig_node_all_measurements.savefig("plots/uves-all-measurements-incl-ensemble.pdf")

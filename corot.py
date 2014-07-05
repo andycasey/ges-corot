@@ -12,6 +12,7 @@ from hashlib import md5
 from time import ctime
 
 import numpy as np
+import pyfits
 from pystan import StanModel
 
 
@@ -193,7 +194,7 @@ def cross_validate(benchmarks, all_node_results, **kwargs):
     """
 
     # Measurements & Uncertainty.
-    results = np.zeros((len(benchmarks), 2))
+    results = np.zeros((len(benchmarks), 3))
     for i, benchmark in enumerate(benchmarks):
         # Create a subset with this benchmark removed.
         benchmark_subset = np.delete(benchmarks, i)
@@ -235,9 +236,9 @@ def update_table(parameter_filename, cnames, results, setup, ext_index=1, clear_
     # Now fill it with the homogenised results.
     for cname, (teff, u_teff, num_nodes) in zip(cnames, results):
         match = (image[ext_index].data["CNAME"] == cname) * (image[ext_index].data["SETUP"] == setup)
-        image[ext_index].data[match]["TEFF"] = teff
-        image[ext_index].data[match]["e_TEFF"] = u_teff
-        image[ext_index].data[match]["NN_TEFF"] = num_nodes
+        image[ext_index].data["TEFF"][match] = teff
+        image[ext_index].data["e_TEFF"][match] = u_teff
+        image[ext_index].data["NN_TEFF"][match] = num_nodes
 
     return image
 
