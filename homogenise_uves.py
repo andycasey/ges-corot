@@ -11,7 +11,7 @@ from time import ctime
 
 import corot
 import visualise
-from load_data import benchmark_truths, uves_results
+from load_data import benchmark_truths, load_node_data, uves_results
 
 # Run name.
 run_name = "uves-{0}".format(md5(os.path.basename(ctime()).encode("utf-8")).hexdigest())
@@ -51,3 +51,7 @@ hdulist = corot.update_table("results/homogenised_parameters.fits",
 hdulist.writeto("results/homogenised_parameters.fits", clobber=True)
 
 # Visualise the homogenised results in context of the initial node results as a corner plot.
+uves_results_incl_ensemble = uves_results.copy()
+uves_results_incl_ensemble["ENSEMBLE RESULT"] = (load_data.load_node_data("results/homogenised_parameters.fits"), "NONE", "UVES")
+fig_node_all_measurements = visualise.node_all_measurements(uves_results_incl_ensemble)
+fig_node_all_measurements.savefig("plots/uves-all-measurements-incl-ensemble.pdf")

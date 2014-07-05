@@ -55,3 +55,7 @@ hdulist = corot.update_table("results/homogenised_parameters.fits",
 hdulist.writeto("results/homogenised_parameters.fits", clobber=True)
 
 # Visualise the homogenised results in context of the initial node results as a corner plot.
+giraffe_results_incl_ensemble = giraffe_results.copy()
+giraffe_results_incl_ensemble["ENSEMBLE RESULT"] = (load_data.load_node_data("results/homogenised_parameters.fits"), "NONE", "GIRAFFE")
+fig_node_all_measurements = visualise.node_all_measurements(giraffe_results_incl_ensemble)
+fig_node_all_measurements.savefig("plots/giraffe-all-measurements-incl-ensemble.pdf")
