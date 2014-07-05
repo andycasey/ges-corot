@@ -9,19 +9,16 @@ import cPickle as pickle
 import logging
 import os
 from hashlib import md5
-from textwrap import dedent
 from time import ctime
 
 import numpy as np
-import matplotlib.pyplot as plt
-from sklearn import mixture
 from pystan import StanModel
 
-from load_data import *
 
-import visualise
-
-def build_data_dict(benchmarks, all_node_results):
+def build_data_dict(benchmarks, all_node_results, non_finite_variance=10e9):
+    """
+    Prepare a dictionary containing the data required for the model.
+    """
 
     # The data needs to be in a cleaned format.
     N_nodes, N_benchmarks = len(all_node_results), len(benchmarks)
@@ -31,6 +28,7 @@ def build_data_dict(benchmarks, all_node_results):
     # Match benchmarks in each node, then include their results to the array.
     i = 0
     additive_variance = np.zeros((N_nodes, N_benchmarks))
+    node_names = []
     for node, values in all_node_results.iteritems():
         node_results, node_flags, node_setup = values
         
@@ -49,8 +47,9 @@ def build_data_dict(benchmarks, all_node_results):
                 node_teff_measured[i, j] = measurement
                 node_teff_uncertainty[i, j] = node_results[match_by_object]["e_TEFF"]
             else:
-                additive_variance[i, j] = 10000000000.
+                additive_variance[i, j] = non_finite_variance
         i += 1
+        node_names.append(node)
 
     # Prepare the data in a cleaner format.
     data = {
@@ -62,11 +61,11 @@ def build_data_dict(benchmarks, all_node_results):
         "node_teff_uncertainty": node_teff_uncertainty,
         "additive_variance": additive_variance
     }
-    return data
+    return data, node_names
 
 
-def calibrate_noise_model(benchmarks, all_node_results, run_name=None, model_filename="models/noise-with-outliers.stan", 
-    iterations=5000, warmup=4000, chains=1):
+def calibrate_noise_model(benchmarks, all_node_results, run_name=None,
+    model_filename="models/noise-with-outliers.stan", iterations=9000, warmup=8000, chains=1):
     """
     Run the given noise model for the benchmark stars.
     """
@@ -95,7 +94,7 @@ def calibrate_noise_model(benchmarks, all_node_results, run_name=None, model_fil
         with open(pickled_model_filename, "wb") as fp:
             pickle.dump(model, fp)
 
-    data = build_data_dict(benchmarks, all_node_results)
+    data, node_names = build_data_dict(benchmarks, all_node_results)
 
     logging.info("Optimizing...")
     op = model.optimizing(data=data)
@@ -105,7 +104,7 @@ def calibrate_noise_model(benchmarks, all_node_results, run_name=None, model_fil
     calibrated_model = model.sampling(data=data, pars=op["par"], iter=iterations, warmup=warmup, chains=chains)    
     
     # Add the node names into the data dict.
-    calibrated_model.data["node_names"] = all_node_results.keys()
+    calibrated_model.data["node_names"] = node_names
 
     return calibrated_model
 
@@ -146,7 +145,7 @@ def homogenise(data, model):
         weights /= sum(weights)
         calibrated_data_weighted[j] = (np.random.multivariate_normal(data[valid_data_indices], covariance[j]) * weights)[0,0]
 
-    return np.median(calibrated_data_weighted), np.std(calibrated_data_weighted)
+    return [np.median(calibrated_data_weighted), np.std(calibrated_data_weighted), N_valid_measurements]
 
 
 def homogenise_all(all_node_results, model):
@@ -157,23 +156,34 @@ def homogenise_all(all_node_results, model):
     # Need to identify stars that have this setup.
     first_node = all_node_results.keys()[0]
     setup = all_node_results[first_node][2]
-    cnames = all_node_results[first_node][0][(all_node_results[first_node][0]["SETUP"] == setup)]
+    cnames = all_node_results[first_node][0][(all_node_results[first_node][0]["SETUP"] == setup)]["CNAME"]
+    filenames = all_node_results[first_node][0][(all_node_results[first_node][0]["SETUP"] == setup)]["FILENAME"]
+    snr = all_node_results[first_node][0][(all_node_results[first_node][0]["SETUP"] == setup)]["SNR"]
     num_stars = len(cnames)
 
     # Go through each star, find it in all other nodes.
-    homogenised_results = np.zeros((num_stars, 2))
-    for i, cname in enumerate(cnames):
+    homogenised_results = np.zeros((num_stars, 3))
+    for i, (cname, filename) in enumerate(zip(cnames, filenames)):
 
         # Match by CNAME in all the nodes.
-        data = []
-        for node, node_results in all_node_results.keys():
-            data.append(node_results[0][(node_results[0]["CNAME"] == cname) * (node_results[0]["SETUP"] == setup)]["TEFF"])
+        data = np.zeros(len(all_node_results))
+        for j, (node, node_results) in enumerate(all_node_results.iteritems()):
+
+            matches = (node_results[0]["CNAME"] == cname) * (node_results[0]["SETUP"] == setup)
+            if sum(matches) > 1:
+                matches *= (node_results[0]["FILENAME"] == filename)
+
+            assert sum(matches) > 0, "Could not match {0} for setup {1} in node results {2}".format(
+                cname, setup, node)
+            assert 2 > sum(matches), "There were multiple matches for CNAME, FILENAME ({0}, {1})"\
+                "in node results {2}".format(cname, filename, node)
+            data[j] = node_results[0][matches]["TEFF"]
 
         # Homogenise the data.            
         homogenised_results[i] = homogenise(data, model)
 
     # Return a table with all the homogenised values.
-    return homogenised_results
+    return (cnames, snr, homogenised_results)
  
 
 def cross_validate(benchmarks, all_node_results, **kwargs):
@@ -204,4 +214,6 @@ def cross_validate(benchmarks, all_node_results, **kwargs):
 
     measurements, uncertainties = results[:,0], results[:,1]
     return (measurements, uncertainties)
+
+
 
