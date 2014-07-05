@@ -5,16 +5,16 @@
 
 __author__ = "Andy Casey (arc@ast.cam.ac.uk)"
 
-import matplotlib.pyplot as plt
+from itertools import combinations
+from collections import Counter
 
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import colors
 from matplotlib.ticker import MaxNLocator
 from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
 
-from load_data import all_node_results
-from itertools import combinations
-
-import numpy as np
 
 
 def node_benchmark_measurements(benchmarks, model, recommended_values=None, recommended_uncertainties=None,
@@ -224,6 +224,7 @@ def inferred_node_uncertainties(model, node_names=None):
         node_names = model.data["node_names"]
 
     samples = model.extract(permuted=True)
+
     fig, ax = plt.subplots()
     ax.set_color_cycle(["#348ABD", "#7A68A6", "#A60628", "#467821", "#CF4457", "#188487", "#E24A33", "#000000"])
     bins = np.linspace(0, 1000, samples["var_node"].shape[0]**0.5)
@@ -249,7 +250,8 @@ def node_all_measurements(all_node_results, parameter="TEFF", extent=(3000, 7000
     """
 
     # How many nodes to plot?
-    K = len(nodes) - 1
+    K = len(all_node_results) - 1
+    setup = all_node_results[all_node_results.keys()[0]][2]
     assert K > 1, "Need more than one node to compare against."
 
     factor = 2.0           # size of one side of one panel
@@ -265,6 +267,9 @@ def node_all_measurements(all_node_results, parameter="TEFF", extent=(3000, 7000
     tr = (lbdim + plotdim) / dim
     fig.subplots_adjust(left=lb, bottom=lb, right=tr, top=tr,
         wspace=whspace, hspace=whspace)
+
+    cmap = colors.ListedColormap(["#ffffff", "#666666", "#000000"])
+    norm = colors.BoundaryNorm([0, 1, 2], cmap.N)
     
     for i, node_y in enumerate(all_node_results.keys()):
 
@@ -289,8 +294,16 @@ def node_all_measurements(all_node_results, parameter="TEFF", extent=(3000, 7000
             y_err = all_node_results[node_y][0]["e_"+parameter][indices]
 
             ax.plot(extent, extent, "k:", zorder=-100)
-            ax.errorbar(x_data, y_data, xerr=x_err, yerr=y_err, c="k", aa=True, fmt='o', mec='k',
-                mfc="w", ms=6, zorder=100)
+
+            # Any limiting TECH flags?
+            facecolor = ["#FFFFFF", "#FF1D23", "#94090D"]
+            colour = (all_node_results[node_x][1] == all_node_results[node_x][0]["TECH"][indices].astype(str)).astype(int) \
+                + (all_node_results[node_y][1] == all_node_results[node_y][0]["TECH"][indices].astype(str)).astype(int)
+            # Create some CMAP
+            ax.errorbar(x_data, y_data, xerr=x_err, yerr=y_err, ecolor="k", aa=True, fmt=None, mec='k',
+                mfc="w", ms=6, zorder=1, lc="k")
+            ax.scatter(x_data, y_data, facecolor=[facecolor[each] for each in colour],
+                cmap=cmap, norm=norm, zorder=100)
             
             ax.set_xlim(extent)
             ax.set_ylim(extent)
@@ -311,6 +324,108 @@ def node_all_measurements(all_node_results, parameter="TEFF", extent=(3000, 7000
                 ax.set_ylabel(node_y)
                 ax.yaxis.set_label_coords(-0.3, 0.5)
 
+    return fig
+
+
+def repeat_measurements(cnames, snr, homogenised_results):
+    """
+    Create a plot visualising the repeat measurements for stars.
+    """
+
+    # Find the multiples.
+    repeated_cnames = []
+    for cname, count in Counter(cnames).iteritems():
+        if count > 1: repeated_cnames.append(cname)
+
+    # Get all the measurements and associated S/N for each.
+    results = []
+    num_stars = len(repeated_cnames)
+    for cname in repeated_cnames:
+
+        # Find the one with the largest S/N.
+        indices = list(np.where(cnames == cname)[0])
+        highest_snr_index = indices.pop(np.argmax(snr[indices]))
+
+        reference_results = homogenised_results[highest_snr_index]
+        other_results = homogenised_results[indices]
+
+        # Make the other results referenced.
+        other_results[:,0] -= reference_results[0]
+
+        results.append((cname, reference_results, other_results, [snr[highest_snr_index]] + snr[indices]))
+
+    # Sort the results by the reference temperature so we can see how the effects change with temperature.
+    sorted_indices = np.argsort([each[1][0] for each in results])
+
+    fig, ax = plt.subplots(figsize=(10.9375, 6.875))
+    fig.subplots_adjust(left=0.10, bottom=0.25, top=0.95, right=0.80)
+    cbar_ax = fig.add_axes([0.85, 0.25, 0.05, 0.7])
+
+    cmap = plt.cm.get_cmap("RdYlGn")
+    snrs = np.array([each[3] for each in results]).flatten()
+    vmin, vmax = np.min(snrs), np.max(snrs)
+    # TODO Round vmin and vmax to appropriate values?
+
+    # Draw the reference points.
+    ax.errorbar(3*np.arange(num_stars), [0] * num_stars, yerr=[results[index][1][1] for index in sorted_indices],
+            fmt=None, c='k', elinewidth=1, capsize=2, ecolor="k", zorder=1000)
+    ax.scatter(3*np.arange(num_stars), [0] * num_stars, c=[results[index][3][0] for index in sorted_indices],
+        zorder=10000, vmin=vmin, vmax=vmax, cmap=cmap)
+
+    # Draw the other points.
+    for i, result in enumerate(results):
+
+        for j, (repeated_measurement, repeated_snr) in enumerate(zip(result[2], result[3])):
+
+            measurement, uncertainty, num_measurements = repeated_measurement
+            ax.errorbar([3*i + (j + 1) * 0.5], [measurement], yerr=[uncertainty], fmt=None, c='k', elinewidth=1, capsize=2, ecolor='k',
+                zorder=1000)
+            scat = ax.scatter([3*i + (j + 1) * 0.5], [measurement], c=repeated_snr, zorder=1000, vmin=vmin, vmax=vmax,cmap=cmap)
+
+    # Prettify the axes.
+    ylim = np.max(np.abs(ax.get_ylim()))
+    ax.set_ylim(-ylim, +ylim)
+    ax.set_xlim(-3, 3*len(results))
+    ax.axhline(0, ls=":", zorder=-100)
+    ax.set_xticks(3*np.arange(len(results)))
+    ax.set_xticklabels([repeated_cnames[index] for index in sorted_indices], rotation=90)
+    ax.yaxis.set_major_locator(MaxNLocator(5))
+    ax.set_ylabel("$\Delta{}T_{\\rm eff}\,({\\rm K})$")
+    [l.set_rotation(45) for l in ax.get_yticklabels()]
+    ax.xaxis.set_ticks_position('bottom')
+    ax.yaxis.set_ticks_position('left')
+
+    ax.spines["left"]._linewidth = 0.5
+    ax.spines["bottom"]._linewidth = 0.0
+    ax.spines["top"]._linewidth = 0.0
+    ax.spines["right"]._linewidth = 0.0
+
+    # Add a colormap.
+    cbar = plt.colorbar(scat, cax=cbar_ax)
+    cbar.set_label("$S/N$")
+
+    return fig
+
+
+def snr_vs_uncertainties(snr, homogenised_results, c=None, c_label="Number of node measurements"):
+
+    if c is None:
+        c = homogenised_results[:,2]
+
+    # homogenised_results has columns:
+    # measurement, uncertainty, num_nodes
+
+    fig, ax = plt.subplots()
+    fig.subplots_adjust(left=0.10, bottom=0.10, top=0.95, right=0.95)
+    cmap = plt.cm.get_cmap("autumn")
+    norm = colors.BoundaryNorm(np.arange(1, np.max(c) + 1), cmap.N)
+    scat = ax.scatter(snr, homogenised_results[:,1], c=c, cmap=cmap, norm=norm)
+    cbar = plt.colorbar(scat)
+    cbar.set_label(c_label)
+    ax.set_xlabel("$S/N$")
+    ax.set_ylabel("$\sigma(T_{\\rm eff})\,({\\rm K})$")
+    ax.set_xlim(0, ax.get_xlim()[1])
+    
     return fig
 
 
